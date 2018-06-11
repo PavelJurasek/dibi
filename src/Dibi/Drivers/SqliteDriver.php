@@ -94,7 +94,7 @@ class SqliteDriver implements Dibi\Driver
 	}
 
 
-	public static function createException(string $message, $code, string $sql): Dibi\DriverException
+	public static function createException(string $message, $code, string $sql, \Throwable $throwable = null): Dibi\DriverException
 	{
 		if ($code !== 19) {
 			return new Dibi\DriverException($message, $code, $sql);
@@ -103,20 +103,20 @@ class SqliteDriver implements Dibi\Driver
 			|| str_contains($message, 'is not unique')
 			|| str_contains($message, 'UNIQUE constraint failed')
 		) {
-			return new Dibi\UniqueConstraintViolationException($message, $code, $sql);
+			return new Dibi\UniqueConstraintViolationException($message, $code, $sql, $throwable);
 
 		} elseif (str_contains($message, 'may not be null')
 			|| str_contains($message, 'NOT NULL constraint failed')
 		) {
-			return new Dibi\NotNullConstraintViolationException($message, $code, $sql);
+			return new Dibi\NotNullConstraintViolationException($message, $code, $sql, $throwable);
 
 		} elseif (str_contains($message, 'foreign key constraint failed')
 			|| str_contains($message, 'FOREIGN KEY constraint failed')
 		) {
-			return new Dibi\ForeignKeyConstraintViolationException($message, $code, $sql);
+			return new Dibi\ForeignKeyConstraintViolationException($message, $code, $sql, $throwable);
 
 		} else {
-			return new Dibi\ConstraintViolationException($message, $code, $sql);
+			return new Dibi\ConstraintViolationException($message, $code, $sql, $throwable);
 		}
 	}
 
