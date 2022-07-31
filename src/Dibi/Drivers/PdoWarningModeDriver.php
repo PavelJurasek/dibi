@@ -25,21 +25,17 @@ use PDO;
  *   - resource (PDO) => existing connection
  *   - version
  */
-class PdoDriver extends BasePdoDriver
+class PdoWarningModeDriver extends BasePdoDriver
 {
 	protected function getErrmode(): int
 	{
-		return PDO::ERRMODE_EXCEPTION;
+		return PDO::ERRMODE_WARNING;
 	}
 
 
 	protected function initServerVersion(): ?string
 	{
-		try {
-			return $this->connection->getAttribute(PDO::ATTR_SERVER_VERSION);
-		} catch (\PDOException $e) {
-			return null;
-		}
+		return @$this->connection->getAttribute(PDO::ATTR_SERVER_VERSION); // @ - may be not supported
 	}
 
 
@@ -49,54 +45,55 @@ class PdoDriver extends BasePdoDriver
 	 */
 	public function query(string $sql): ?Dibi\ResultDriver
 	{
-		try {
-			$res = $this->connection->query($sql);
+		if ($res = @$this->connection->query($sql)) { // intentionally @ to catch warnings in warning PDO mode
 			$this->affectedRows = $res->rowCount();
 			return $res->columnCount() ? $this->createResultDriver($res) : null;
-
-		} catch (\PDOException $pdoException) {
-			$this->affectedRows = null;
-			throw $this->createException($pdoException->errorInfo, $sql);
 		}
+
+		$this->affectedRows = null;
+		throw $this->createException(
+			$this->connection->errorInfo(),
+			$sql,
+		);
 	}
 
 
 	public function getInsertId(?string $sequence): ?int
 	{
-		try {
-			return Helpers::intVal($this->connection->lastInsertId($sequence));
-		} catch (\PDOException $pdoException) {
-			throw $this->createException($pdoException->errorInfo, '');
+		$lastInsertId = $this->connection->lastInsertId($sequence);
+
+		if ($lastInsertId === false) {
+			$err = $this->connection->errorInfo();
+			throw new Dibi\DriverException("SQLSTATE[$err[0]]: $err[2]", $err[1]);
 		}
+
+		return Helpers::intVal($lastInsertId);
 	}
 
 
 	public function begin(?string $savepoint = null): void
 	{
-		try {
-			$this->connection->beginTransaction();
-		} catch (\PDOException $pdoException) {
-			throw $this->createException($pdoException->errorInfo, 'START TRANSACTION');
+		if (!$this->connection->beginTransaction()) {
+			$err = $this->connection->errorInfo();
+			throw new Dibi\DriverException("SQLSTATE[$err[0]]: $err[2]", $err[1]);
 		}
 	}
 
 
 	public function commit(?string $savepoint = null): void
 	{
-		try {
-			$this->connection->commit();
-		} catch (\PDOException $pdoException) {
-			throw $this->createException($pdoException->errorInfo, 'COMMIT');
+		if (!$this->connection->commit()) {
+			$err = $this->connection->errorInfo();
+			throw new Dibi\DriverException("SQLSTATE[$err[0]]: $err[2]", $err[1]);
 		}
 	}
 
 
 	public function rollback(?string $savepoint = null): void
 	{
-		try {
-			$this->connection->rollBack();
-		} catch (\PDOException $pdoException) {
-			throw $this->createException($pdoException->errorInfo, 'ROLLBACK');
+		if (!$this->connection->rollBack()) {
+			$err = $this->connection->errorInfo();
+			throw new Dibi\DriverException("SQLSTATE[$err[0]]: $err[2]", $err[1]);
 		}
 	}
 }

@@ -1,6 +1,6 @@
 <?php
 /**
- * @dataProvider ../databases.ini != postgre, pdo
+ * @dataProvider ../databases.ini != nothing, pdo
  */
 
 // Context:
@@ -17,8 +17,6 @@ declare(strict_types=1);
 
 use Dibi\Connection;
 use Dibi\DriverException;
-use Dibi\Drivers\BasePdoDriver;
-use Dibi\Drivers\PdoDriver;
 use Dibi\Drivers\PdoWarningModeDriver;
 use Dibi\ForeignKeyConstraintViolationException;
 use Dibi\NotNullConstraintViolationException;
@@ -32,10 +30,12 @@ function buildPDOConnection(int $errorMode = null): PDO
 {
 	global $config;
 
+	$config['driver'] = PdoWarningModeDriver::class;
+
 	// used to parse config, establish connection
 	$connection = new Connection($config);
 	$dibiDriver = $connection->getDriver();
-	assert($dibiDriver instanceof PdoDriver);
+	assert($dibiDriver instanceof PdoWarningModeDriver);
 
 	// hack: extract PDO connection from driver (no public interface for that)
 	$connectionProperty = (new ReflectionClass($dibiDriver))
@@ -45,7 +45,7 @@ function buildPDOConnection(int $errorMode = null): PDO
 	assert($pdo instanceof PDO);
 
 	// check that error reporting is in PHPs default value
-	assert($pdo->getAttribute(PDO::ATTR_ERRMODE) === PDO::ERRMODE_EXCEPTION);
+	assert($pdo->getAttribute(PDO::ATTR_ERRMODE) === PDO::ERRMODE_WARNING);
 
 	// override PDO error mode if provided
 	if ($errorMode !== null) {
@@ -55,10 +55,10 @@ function buildPDOConnection(int $errorMode = null): PDO
 }
 
 
-function buildDibiConnection(PDO $pdo, string $driver = 'pdo'): Connection
+function buildDibiConnection(PDO $pdo): Connection
 {
-	$conn = new Connection(['resource' => $pdo, 'driver' => $driver]);
-	assert($conn->getDriver() instanceof BasePdoDriver);
+	$conn = new Connection(['resource' => $pdo, 'driver' => 'pdoWarningMode']);
+	assert($conn->getDriver() instanceof PdoWarningModeDriver);
 	return $conn;
 }
 
@@ -96,16 +96,5 @@ $runTests = function (Connection $connection) use ($config) {
 	}, ForeignKeyConstraintViolationException::class);
 };
 
-// PDO error mode: exception
-$runTests(buildDibiConnection(buildPDOConnection(PDO::ERRMODE_EXCEPTION)));
-
 // PDO error mode: warning
-$runTests(buildDibiConnection(buildPDOConnection(PDO::ERRMODE_WARNING), PdoWarningModeDriver::class));
-
-// PDO error mode: explicitly set silent
-Assert::exception(static function () {
-	buildDibiConnection(buildPDOConnection(PDO::ERRMODE_SILENT));
-}, DriverException::class, 'Provided PDO connection is in unsupported SILENT mode.');
-
-// PDO error mode: implicitly set exception
-$runTests(buildDibiConnection(buildPDOConnection(null)));
+$runTests(buildDibiConnection(buildPDOConnection(PDO::ERRMODE_WARNING)));
